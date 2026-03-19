@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Austin Animal Shelter Explorer</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <div class="paw-icons" aria-hidden="true">🐾</div>
+      <h1>Austin Animal Shelter</h1>
+      <p class="subtitle">Explore how age, species, and intake type shape the fate of shelter animals.<br>
+        Each dot is one animal — click to meet them.</p>
+    </div>
+    <div class="stats-bar">
+      <div class="stat-box">
+        <div class="stat-number" id="stat-total">—</div>
+        <div class="stat-label">Animals shown</div>
+      </div>
+      <div class="stat-box highlight">
+        <div class="stat-number" id="stat-adopted">—</div>
+        <div class="stat-label">Adoption rate</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-number" id="stat-dog-pct">—</div>
+        <div class="stat-label">Dogs adopted</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-number" id="stat-cat-pct">—</div>
+        <div class="stat-label">Cats adopted</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN LAYOUT -->
+  <div class="viz-container">
+
+    <!-- LEFT: main scatter plot -->
+    <div class="left-panel">
+      <div class="plot-header">
+        <div class="legend">
+          <div class="legend-item"><span class="legend-dot dog"></span> Dog</div>
+          <div class="legend-item"><span class="legend-dot cat"></span> Cat</div>
+        </div>
+        <div class="plot-hint">Hover for quick info · Click for full details</div>
+      </div>
+      <svg id="main-plot"></svg>
+    </div>
+
+    <!-- RIGHT: controls + detail -->
+    <div class="right-panel">
+
+      <!-- Filters -->
+      <div class="filters">
+        <div class="filter-title">Filter Animals</div>
+
+        <div class="filter-group">
+          <span class="filter-label">Animal Type</span>
+          <div class="btn-group" id="filter-type">
+            <button class="btn-filter active" data-val="All">All</button>
+            <button class="btn-filter" data-val="Dog">🐕 Dog</button>
+            <button class="btn-filter" data-val="Cat">🐈 Cat</button>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">How They Arrived</span>
+          <div class="btn-group" id="filter-intake">
+            <button class="btn-filter active" data-val="All">All</button>
+            <button class="btn-filter" data-val="Stray">Stray</button>
+            <button class="btn-filter" data-val="Owner Surrender">Surrendered</button>
+            <button class="btn-filter" data-val="Public Assist">Public Assist</button>
+          </div>
+        </div>
+
+        <div class="filter-group">
+          <span class="filter-label">Age Group</span>
+          <div class="btn-group" id="filter-age">
+            <button class="btn-filter active" data-val="All">All</button>
+            <button class="btn-filter" data-val="Baby (&lt;1yr)">Baby</button>
+            <button class="btn-filter" data-val="Young (1-3yr)">Young</button>
+            <button class="btn-filter" data-val="Adult (4-7yr)">Adult</button>
+            <button class="btn-filter" data-val="Senior (8+yr)">Senior</button>
+          </div>
+        </div>
+
+        <button id="reset-btn">Reset Filters</button>
+      </div>
+
+      <!-- Detail Card -->
+      <div class="detail-card" id="detail-card">
+        <div class="detail-empty">
+          <div class="detail-empty-icon">🐾</div>
+          <p>Click any dot to<br>meet an animal</p>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- BOTTOM BAR CHART -->
+  <div class="bottom-section">
+    <div class="bottom-header">
+      <div>
+        <h3>Adoption Rate by Age Group</h3>
+        <p>Percentage of animals that were adopted, broken down by age — updates with your filters</p>
+      </div>
+    </div>
+    <svg id="bar-chart"></svg>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>Data: <a href="https://data.austintexas.gov" target="_blank">Austin Animal Center Open Data</a> (2017–2020, 1,500 sampled records) ·
+      Built with <a href="https://d3js.org" target="_blank">D3.js v7</a> ·
+      CSC316 Assignment 3</p>
+  </footer>
+
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<script src="main.js"></script>
+</body>
+</html>
