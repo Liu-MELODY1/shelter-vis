@@ -63,13 +63,13 @@ function dotOpacity(d) {
   }
   // Bar highlight mode
   if (barHighlight !== null) {
-    return d.age_group === barHighlight ? 0.92 : 0.15;
+    return d.condition === barHighlight ? 0.92 : 0.15;
   }
   return 0.82;
 }
 
 function dotRadius(d) {
-  if (barHighlight !== null && d.age_group === barHighlight) return 5.6;
+  if (barHighlight !== null && d.condition === barHighlight) return 5.6;
   return 4;
 }
 
@@ -444,6 +444,16 @@ d3.json('data/animals.json').then(rawData => {
       })
       .on('mouseleave', function() {
         d3.select(this).attr('fill','transparent');
+      })
+      .on('click', function() {
+        if (barHighlight === cond) {
+          barHighlight = null;
+          updateLinkBridge('All');
+        } else {
+          barHighlight = cond;
+          updateLinkBridge('bar-' + cond);
+        }
+        updateScatterHighlight();
       });
   });
 
@@ -468,6 +478,11 @@ d3.json('data/animals.json').then(rawData => {
       inner.classList.add('active');
     } else if (mode === 'insight-3') {
       text.textContent = '✨ Healthy: 52% adoption rate vs 24% for sick/injured — see below';
+      inner.classList.add('active');
+    } else if (mode.startsWith('bar-')) {
+      const cond = mode.replace('bar-','');
+      const label = cond === 'Normal' ? 'Healthy' : cond;
+      text.textContent = `Showing ${label} animals highlighted in scatter plot above ↑ (click again to clear)`;
       inner.classList.add('active');
     } else {
       text.textContent = 'Intake condition shapes fate — explore below ↕';
