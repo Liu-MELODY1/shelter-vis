@@ -39,8 +39,9 @@
     <div class="header-left">
       <h1>🐾 Austin Animal<br><span>Shelter Explorer</span></h1>
       <p class="subtitle">
-        Explore how age, species, and intake type shape the fate of shelter animals.<br>
-        Each dot is one animal — <strong>click to meet them!</strong>
+        Explore how days in shelter shape the fate of animals
+        — each dot is one animal.
+        <strong>Click to meet them!</strong>
       </p>
     </div>
 
@@ -61,8 +62,42 @@
         <div class="stat-number" id="stat-cat-pct">—</div>
         <div class="stat-label">🐈 Cat adoption rate</div>
       </div>
+      <div class="stat-box euthanasia-stat">
+        <div class="stat-number" id="stat-euthanasia">—</div>
+        <div class="stat-label">😢 Euthanasia rate</div>
+      </div>
     </div>
   </header>
+
+  <!-- Narrative intro banner -->
+  <div class="story-banner" id="story-banner">
+    <div class="story-banner-inner">
+      <span class="story-icon">⏳</span>
+      <div class="story-text">
+        <strong>Not all animals get to wait.</strong>
+        Many are euthanized immediately upon arrival due to
+        severe condition. Explore how intake condition shapes
+        their fate — and which animals never had a chance.
+      </div>
+      <button class="story-close" id="story-close">Got it ✓</button>
+    </div>
+  </div>
+
+  <!-- Insight cards -->
+  <div class="insight-bar">
+    <div class="insight-card" id="insight-1">
+      <span class="insight-icon">⚠️</span>
+      <span class="insight-text">Most euthanasia happens <strong>within the first 7 days</strong></span>
+    </div>
+    <div class="insight-card" id="insight-2">
+      <span class="insight-icon">💔</span>
+      <span class="insight-text">Sick & injured animals <strong>cluster at day 0–1</strong></span>
+    </div>
+    <div class="insight-card" id="insight-3">
+      <span class="insight-icon">✨</span>
+      <span class="insight-text">Adoptions spread across <strong>days 7–120</strong> — they take time</span>
+    </div>
+  </div>
 
   <!-- MAIN LAYOUT -->
   <div class="viz-container">
@@ -74,18 +109,17 @@
           <div class="legend-item"><span class="legend-dot dog"></span> Dog</div>
           <div class="legend-item"><span class="legend-dot cat"></span> Cat</div>
         </div>
-        <div id="days-gradient-legend" style="display:none">
-          <span class="grad-label">1d</span>
-          <div class="grad-bar"></div>
-          <span class="grad-label">60d+</span>
-        </div>
         <div class="plot-header-right">
-          <div class="color-mode-btns">
-            <span class="color-mode-label">Color:</span>
-            <button class="color-btn active" id="color-btn-species">🐾 Species</button>
-            <button class="color-btn" id="color-btn-days">📅 Days</button>
+          <div class="plot-header-top-row">
+            <div class="dot-count-display">
+              Showing <span class="stat-number" id="dot-count-num">—</span>
+              <span class="stat-label">animals</span>
+            </div>
           </div>
-          <div class="plot-hint">Hover for quick info · Click to open profile card!</div>
+          <div class="plot-header-bottom-row">
+            <div class="plot-hint">Hover for quick info · Click to open profile card!</div>
+            <button id="clear-brush-btn" class="clear-brush-btn" style="display:none">✕ Clear Brush</button>
+          </div>
         </div>
       </div>
       <svg id="main-plot"></svg>
@@ -130,12 +164,13 @@
         </div>
 
         <div class="filter-group">
-          <div class="filter-label-row">
-            <span class="filter-label">⏱ Max Days in Shelter</span>
-            <span class="days-badge" id="days-badge">No limit</span>
+          <span class="filter-label">Intake Condition</span>
+          <div class="btn-group" id="filter-condition">
+            <button class="btn-filter active" data-val="All">All</button>
+            <button class="btn-filter" data-val="Normal">Healthy</button>
+            <button class="btn-filter" data-val="Sick">Sick</button>
+            <button class="btn-filter" data-val="Injured">Injured</button>
           </div>
-          <input type="range" id="days-slider" class="days-slider" min="1" max="60" value="60" />
-          <div class="days-ticks"><span>1d</span><span>30d</span><span>60+ (all)</span></div>
         </div>
 
         <button id="reset-btn">↺ Reset Filters</button>
@@ -148,7 +183,7 @@
   <div id="link-bridge">
     <div class="link-bridge-inner">
       <span class="link-bridge-arrow">↕</span>
-      <span id="link-bridge-text">Click a bar below to filter the dots above by age group</span>
+      <span id="link-bridge-text">Click a bar below to highlight that age group in the scatter plot</span>
     </div>
   </div>
 
@@ -156,7 +191,7 @@
   <div class="bottom-section">
     <div class="bottom-header">
       <h3>📊 Adoption Rate by Age Group</h3>
-      <p>Percentage adopted, by age — updates with filters · click a bar to filter!</p>
+      <p>Percentage adopted, by age — updates with filters · click a bar to highlight!</p>
     </div>
     <svg id="bar-chart"></svg>
   </div>

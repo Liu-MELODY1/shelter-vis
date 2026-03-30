@@ -94,6 +94,83 @@ body::before {
   padding: 36px 28px 64px;
 }
 
+/* ─── Story banner ───────────────────────────────────────────── */
+.story-banner {
+  background: linear-gradient(135deg, #FFF0F5, #F5EEFF);
+  border: 2px solid #F0D0E0;
+  border-radius: 14px;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  display: flex;
+}
+
+.story-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.88rem;
+  color: #3D2040;
+  line-height: 1.5;
+}
+
+.story-icon { font-size: 1.6rem; flex-shrink: 0; }
+.story-text { flex: 1; }
+.story-text strong { color: #FF8FAB; }
+
+.story-close {
+  background: white;
+  border: 2px solid #F0D0E0;
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #A080A0;
+  cursor: none;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.story-close:hover {
+  border-color: #FF8FAB;
+  color: #FF8FAB;
+}
+
+/* ─── Insight bar ────────────────────────────────────────────── */
+.insight-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.insight-card {
+  flex: 1;
+  min-width: 180px;
+  background: white;
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.82rem;
+  color: var(--text);
+  line-height: 1.4;
+  box-shadow: var(--shadow);
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.insight-card.highlighted {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(255,143,171,0.2);
+}
+
+.insight-icon { font-size: 1.2rem; flex-shrink: 0; }
+
 /* ─── Header ─────────────────────────────────────────────────── */
 header {
   display: flex;
@@ -127,7 +204,7 @@ header h1 span { color: var(--accent); }
 /* ─── Filter GIF (sits on top of filter card) ───────────────── */
 .filter-gif-wrap {
   position: absolute;
-  top: -145px;
+  top: -60px;
   left: 0;
   right: 0;
   display: flex;
@@ -137,8 +214,8 @@ header h1 span { color: var(--accent); }
 }
 
 .filter-gif {
-  width: 160px;
-  height: 160px;
+  width: 140px;
+  height: 140px;
 }
 
 /* ─── Stats bar ──────────────────────────────────────────────── */
@@ -166,6 +243,12 @@ header h1 span { color: var(--accent); }
   background: linear-gradient(135deg, #FFE0EC, #FFF0F5);
   border-color: #FFB3D0;
 }
+
+.stat-box.euthanasia-stat {
+  background: linear-gradient(135deg, #FFE8E8, #FFF5F5);
+  border-color: #F0B0B0;
+}
+.stat-box.euthanasia-stat .stat-number { color: #C45050; }
 
 .stat-number {
   font-family: 'Caveat', cursive;
@@ -196,9 +279,6 @@ header h1 span { color: var(--accent); }
   width: 260px;
   flex-shrink: 0;
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
 }
 
 /* ─── Plot header ────────────────────────────────────────────── */
@@ -223,52 +303,6 @@ header h1 span { color: var(--accent); }
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.color-mode-label {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--muted);
-  font-family: 'Nunito', sans-serif;
-}
-
-.color-btn {
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 1.5px solid var(--border);
-  background: white;
-  font-family: 'Nunito', sans-serif;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--muted);
-  cursor: none;
-  transition: all 0.15s;
-}
-
-.color-btn.active {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: white;
-}
-
-#days-gradient-legend {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.grad-bar {
-  width: 100px;
-  height: 10px;
-  border-radius: 5px;
-  background: linear-gradient(to right, #FF8FAB, #2D0B5A);
-}
-
-.grad-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--muted);
-  font-family: 'Nunito', sans-serif;
 }
 
 .legend { display: flex; gap: 18px; }
@@ -307,10 +341,15 @@ header h1 span { color: var(--accent); }
 
 /* ─── Filters ────────────────────────────────────────────────── */
 .filters {
+  position: relative;
+  margin-top: 65px;
   background: white;
   border: 2px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding-top: 10px;
+  padding-left: 20px;
+  padding-right: 20px;
+  padding-bottom: 20px;
   box-shadow: var(--shadow);
 }
 
@@ -329,52 +368,6 @@ header h1 span { color: var(--accent); }
   justify-content: space-between;
   align-items: center;
   margin-bottom: 8px;
-}
-
-.days-badge {
-  font-size: 0.75rem;
-  font-weight: 800;
-  font-family: 'Nunito', sans-serif;
-  color: var(--muted);
-  background: #F5E6EE;
-  border-radius: 999px;
-  padding: 2px 9px;
-  transition: all 0.2s;
-}
-
-.days-badge.active {
-  background: var(--accent);
-  color: white;
-}
-
-.days-slider {
-  -webkit-appearance: none;
-  width: 100%;
-  height: 5px;
-  border-radius: 5px;
-  background: linear-gradient(to right, #FF8FAB, #2D0B5A);
-  outline: none;
-  cursor: none;
-}
-
-.days-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: white;
-  border: 2.5px solid var(--accent);
-  box-shadow: 0 1px 4px rgba(0,0,0,0.18);
-  cursor: none;
-}
-
-.days-ticks {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.68rem;
-  color: var(--muted);
-  font-family: 'Nunito', sans-serif;
-  margin-top: 4px;
 }
 
 .filter-label {
@@ -777,6 +770,71 @@ footer {
 
 footer a { color: var(--accent); text-decoration: none; font-weight: 800; }
 footer a:hover { text-decoration: underline; }
+
+/* ─── Clear brush button ─────────────────────────────────────── */
+.clear-brush-btn {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1.5px solid var(--accent);
+  background: #FFF0F5;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--accent);
+  cursor: none;
+  transition: all 0.15s;
+}
+.clear-brush-btn:hover {
+  background: var(--accent);
+  color: white;
+}
+
+/* ─── Dot count display ──────────────────────────────────────── */
+.dot-count-display {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.dot-count-display .stat-number {
+  font-size: 1.2rem;
+  color: var(--accent2);
+}
+.dot-count-display .stat-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+/* ─── Plot header layout tweaks ──────────────────────────────── */
+.plot-header-top-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  justify-content: flex-end;
+}
+.plot-header-bottom-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* ─── D3 Brush styling ───────────────────────────────────────── */
+.brush-layer .selection,
+.brush .selection {
+  fill: rgba(255, 143, 171, 0.15);
+  stroke: #FF8FAB;
+  stroke-width: 1.5px;
+  stroke-dasharray: 4,3;
+}
+.brush-layer .handle,
+.brush .handle {
+  fill: #FF8FAB;
+}
+.brush-layer .overlay,
+.brush .overlay {
+  cursor: crosshair !important;
+}
 
 /* ─── Responsive ─────────────────────────────────────────────── */
 @media (max-width: 860px) {

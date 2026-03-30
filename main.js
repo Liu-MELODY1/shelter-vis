@@ -6,10 +6,9 @@
 const OUTCOMES   = ['Other','Euthanasia','Transfer','Return to Owner','Adoption'];
 const AGE_GROUPS = ['Baby (<1yr)','Young (1-3yr)','Adult (4-7yr)','Senior (8+yr)'];
 
-// Pink theme colors
 const TYPE_COLOR = {
-  Dog: '#6BAED6',   // soft blue
-  Cat: '#F5C518',   // warm yellow
+  Dog: '#6BAED6',
+  Cat: '#F5C518',
 };
 
 const OUTCOME_COLOR = {
@@ -20,38 +19,33 @@ const OUTCOME_COLOR = {
   'Other':           '#999',
 };
 
-const filters  = { type: 'All', intake: 'All', ageGroup: 'All' };
+const filters     = { type: 'All', intake: 'All', ageGroup: 'All', condition: 'All' };
 let selectedId    = null;
 let hintDismissed = false;
-let colorMode     = 'species';
-let daysThreshold = 60; // 60 = no limit
-
-const daysColorScale = d3.scaleSequential([1, 60], d3.interpolateRgb('#FF8FAB', '#2D0B5A'));
+let barHighlight  = null; // age group highlighted from bar chart click
+let brushActive   = false;
+let brushedIds    = new Set();
 
 function dotColor(d) {
-  if (colorMode === 'days') {
-    if (d.days_in_shelter === null) return '#ccc';
-    return daysColorScale(Math.min(Math.max(d.days_in_shelter, 1), 60));
-  }
   return TYPE_COLOR[d.type];
 }
 
 function dotOpacity(d) {
-  if (daysThreshold < 60 && d.days_in_shelter !== null && d.days_in_shelter > daysThreshold) {
-    return 0.08;
+  // Brush selection takes priority
+  if (brushActive && brushedIds.size > 0) {
+    return brushedIds.has(d.id) ? 0.88 : 0.15;
+  }
+  // Bar highlight mode
+  if (barHighlight !== null) {
+    return d.age_group === barHighlight ? 0.92 : 0.15;
   }
   return 0.82;
 }
 
-function updateDaysBadge(val) {
-  const badge = document.getElementById('days-badge');
-  if (val >= 60) {
-    badge.textContent = 'No limit';
-    badge.classList.remove('active');
-  } else {
-    badge.textContent = `≤ ${val}d`;
-    badge.classList.add('active');
-  }
+function dotRadius(d) {
+  // Scale up highlighted age group dots 1.4x (4 * 1.4 = 5.6)
+  if (barHighlight !== null && d.age_group === barHighlight) return 5.6;
+  return 4;
 }
 
 // ── Stable jitter ─────────────────────────────────────────────
@@ -71,22 +65,23 @@ document.addEventListener('mousemove', e => {
 });
 
 document.addEventListener('mousedown', e => {
-  // stamp effect at click position
   pawStamp.style.left = e.clientX + 'px';
   pawStamp.style.top  = e.clientY + 'px';
   pawStamp.style.transform = 'translate(-50%,-50%)';
   pawStamp.classList.remove('stamping');
-  void pawStamp.offsetWidth; // reflow
+  void pawStamp.offsetWidth;
   pawStamp.classList.add('stamping');
-
   document.body.classList.add('paw-click');
-
-  // dismiss hint on first interaction
   dismissHint();
 });
 
 document.addEventListener('mouseup', () => {
   document.body.classList.remove('paw-click');
+});
+
+// ── Story banner dismiss ──────────────────────────────────────
+document.getElementById('story-close').addEventListener('click', () => {
+  document.getElementById('story-banner').style.display = 'none';
 });
 
 // ── Hint bubble logic ─────────────────────────────────────────
@@ -98,7 +93,6 @@ let   hintAutoHide= null;
 function showHint() {
   if (hintDismissed) return;
   hintBubble.classList.add('visible');
-  // auto-hide after 4s
   hintAutoHide = setTimeout(() => {
     hintBubble.classList.remove('visible');
   }, 4000);
@@ -112,16 +106,13 @@ function dismissHint() {
 }
 
 hintClose.addEventListener('click', dismissHint);
-
-// Show hint after 5 seconds of page load with no interaction
 hintTimeout = setTimeout(showHint, 5000);
 
-// Any interaction resets the timer
 ['click','mousemove','keydown'].forEach(evt => {
   document.addEventListener(evt, () => {
     if (!hintDismissed) {
       clearTimeout(hintTimeout);
-      hintTimeout = setTimeout(showHint, 8000); // re-trigger if still no dot click
+      hintTimeout = setTimeout(showHint, 8000);
     }
   }, { once: false, passive: true });
 });
@@ -166,7 +157,7 @@ d3.json('data/animals.json').then(rawData => {
 
   const g = svg.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
 
-  const xScale = d3.scaleLinear().domain([0,15]).range([0,iW]).clamp(true);
+  const xScale = d3.scaleLinear().domain([0, 120]).range([0, iW]).clamp(true);
   const yScale = d3.scalePoint().domain(OUTCOMES).range([iH,0]).padding(0.5);
   const rowH   = yScale.step();
 
@@ -185,18 +176,36 @@ d3.json('data/animals.json').then(rawData => {
     .call(gg => gg.selectAll('line')
       .attr('stroke','#F0D0E0').attr('stroke-dasharray','3,5'));
 
+  // 120d+ shaded zone
+  g.append('rect')
+    .attr('x', xScale(118))
+    .attr('y', 0)
+    .attr('width', iW - xScale(118))
+    .attr('height', iH)
+    .attr('fill', 'rgba(180,60,120,0.04)')
+    .attr('pointer-events', 'none');
+
+  g.append('text')
+    .attr('x', xScale(119))
+    .attr('y', -8)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', 'Nunito, sans-serif')
+    .attr('font-size', '9px')
+    .attr('fill', '#C0A0C0')
+    .text('long stays');
+
   // X axis
   g.append('g').attr('class','axis').attr('transform',`translate(0,${iH})`)
     .call(d3.axisBottom(xScale)
-      .tickValues([0,1,2,3,4,5,6,7,8,9,10,12,15])
-      .tickFormat(d => d === 0 ? '0' : d+'y'))
+      .tickValues([0, 7, 14, 21, 30, 45, 60, 90, 120])
+      .tickFormat(d => d === 120 ? '120d+' : d === 0 ? '0' : d+'d'))
     .call(gg => gg.select('.domain').remove());
 
   g.append('text')
     .attr('x',iW/2).attr('y',iH+48).attr('text-anchor','middle')
     .attr('font-family','Nunito,sans-serif').attr('font-size','11px')
     .attr('fill','#A080A0').attr('font-weight','700')
-    .text('Age at Intake (years)');
+    .text('Days in Shelter');
 
   // Y axis labels
   OUTCOMES.forEach(oc => {
@@ -211,10 +220,99 @@ d3.json('data/animals.json').then(rawData => {
       .text(oc);
   });
 
+  // ── Brush layer (BELOW dots so dots can receive hover/click) ─
+  const brushG = g.append('g').attr('class','brush-layer');
+
+  // ── Dots layer (ABOVE brush so they receive events first) ────
   const dotsG   = g.append('g').attr('class','dots');
   const tooltip = d3.select('#tooltip');
 
-  // ── Bar chart ─────────────────────────────────────────────
+  // ── Brush instruction text (top-right, above plot area) ──────
+  g.append('text')
+    .attr('x', iW)
+    .attr('y', -22)
+    .attr('text-anchor', 'end')
+    .attr('font-family', 'Nunito, sans-serif')
+    .attr('font-size', '11px')
+    .attr('fill', '#9060A0')
+    .attr('font-style', 'italic')
+    .text('💡 Drag to select · Clear Brush to reset');
+
+  // ── Brush badge (SVG, above everything) ──────────────────────
+  const brushBadgeG = g.append('g').attr('class','brush-badge-g').style('display','none');
+  const brushBadgeBg = brushBadgeG.append('rect')
+    .attr('rx',6).attr('ry',6).attr('height',22)
+    .attr('fill','rgba(61,32,64,0.82)');
+  const brushBadgeTxt = brushBadgeG.append('text')
+    .attr('y',15).attr('x',8)
+    .attr('font-family','Nunito,sans-serif').attr('font-size','11px')
+    .attr('fill','white').attr('font-weight','700');
+
+  // ── Brush setup ───────────────────────────────────────────────
+  function isInBrush(d, sel) {
+    const cx = xScale(d.days_in_shelter !== null ? Math.min(d.days_in_shelter, 120) : 0);
+    const cy = yScale(d.outcome) + d._jitter * (rowH * 0.36);
+    return cx >= sel[0][0] && cx <= sel[1][0] && cy >= sel[0][1] && cy <= sel[1][1];
+  }
+
+  const clearBrushBtn = document.getElementById('clear-brush-btn');
+
+  function onBrush(event) {
+    const sel = event.selection;
+    if (!sel) {
+      brushActive = false;
+      brushedIds  = new Set();
+      brushBadgeG.style('display','none');
+      clearBrushBtn.style.display = 'none';
+      updateBarChart(applyFilters());
+      updateLinkBridge('All');
+    } else {
+      brushActive = true;
+      document.body.classList.add('brushed-once');
+      const visible = applyFilters();
+      brushedIds = new Set(visible.filter(d => isInBrush(d, sel)).map(d => d.id));
+      const count = brushedIds.size;
+      const label = `${count} selected`;
+      brushBadgeTxt.text(label);
+      // approximate width (7px per char + padding)
+      const tw = label.length * 7 + 16;
+      brushBadgeBg.attr('width', tw);
+      const bx = Math.min(sel[1][0] + 6, iW - tw - 4);
+      const by = Math.max(sel[0][1] - 26, 0);
+      brushBadgeG.attr('transform', `translate(${bx},${by})`).style('display','');
+      clearBrushBtn.style.display = '';
+      updateBarChart(applyFilters());
+      updateStats(applyFilters());
+      updateLinkBridge('brush-' + brushedIds.size);
+    }
+    updateDotCount();
+    dotsG.selectAll('circle')
+      .transition().duration(200).ease(d3.easeCubicOut)
+      .attr('opacity', d => dotOpacity(d));
+  }
+
+  const brush = d3.brush()
+    .extent([[0,0],[iW,iH]])
+    .filter(event => !event.button && event.target.tagName !== 'circle')
+    .on('brush end', onBrush);
+
+  brushG.call(brush);
+
+  clearBrushBtn.addEventListener('click', () => {
+    brushG.call(brush.clear);
+    brushActive = false;
+    brushedIds  = new Set();
+    brushBadgeG.style('display','none');
+    clearBrushBtn.style.display = 'none';
+    updateBarChart(applyFilters());
+    updateLinkBridge('All');
+    updateDotCount();
+    dotsG.selectAll('circle')
+      .transition().duration(350).ease(d3.easeCubicOut)
+      .attr('opacity', d => dotOpacity(d));
+  });
+
+  // ── Bar chart ─────────────────────────────────────────────────
   const bM  = { top:28, right:28, bottom:50, left:52 };
   const bSW = 860, bSH = 170;
   const bIW = bSW - bM.left - bM.right;
@@ -255,7 +353,7 @@ d3.json('data/animals.json').then(rawData => {
   bg.append('text')
     .attr('x',bIW/2).attr('y',bIH+44).attr('text-anchor','middle')
     .attr('font-family','Caveat,cursive').attr('font-size','13px').attr('fill','#C0A0C0')
-    .text('Click a bar group to filter by age · click again to clear ✨');
+    .text('Click a bar group to highlight that age · click again to clear ✨');
 
   // Clickable overlay rects per age group
   const barHoverG = bg.append('g');
@@ -268,41 +366,55 @@ d3.json('data/animals.json').then(rawData => {
       .attr('rx',8).attr('fill','transparent')
       .style('cursor','none')
       .on('mouseenter', function() {
-        if (filters.ageGroup !== ag)
+        if (barHighlight !== ag)
           d3.select(this).attr('fill','rgba(255,143,171,0.10)');
       })
       .on('mouseleave', function() {
-        if (filters.ageGroup !== ag)
+        if (barHighlight !== ag)
           d3.select(this).attr('fill','transparent');
       })
       .on('click', function() {
-        const newVal = filters.ageGroup === ag ? 'All' : ag;
-        filters.ageGroup = newVal;
-        d3.select('#filter-age').selectAll('.btn-filter')
-          .classed('active', function() {
-            return d3.select(this).attr('data-val') === newVal;
+        // Toggle bar highlight (does NOT filter — keeps all dots)
+        if (barHighlight === ag) {
+          barHighlight = null;
+          AGE_GROUPS.forEach(a => {
+            barHoverG.select(`.bar-bg-${a.replace(/[^a-z]/gi,'_')}`)
+              .attr('fill','transparent');
           });
-        AGE_GROUPS.forEach(a => {
-          barHoverG.select(`.bar-bg-${a.replace(/[^a-z]/gi,'_')}`)
-            .attr('fill', a === newVal ? 'rgba(255,143,171,0.15)' : 'transparent');
-        });
-        update();
-        updateLinkBridge(newVal);
+          updateLinkBridge('highlight-off');
+        } else {
+          barHighlight = ag;
+          AGE_GROUPS.forEach(a => {
+            barHoverG.select(`.bar-bg-${a.replace(/[^a-z]/gi,'_')}`)
+              .attr('fill', a === ag ? 'rgba(255,143,171,0.15)' : 'transparent');
+          });
+          updateLinkBridge('highlight-' + ag);
+        }
+        updateScatterHighlight();
+        updateDotCount();
         flashScatter();
       });
   });
 
   const barGroup = bg.append('g');
 
-  // ── Link bridge ───────────────────────────────────────────
-  function updateLinkBridge(ageGroup) {
+  // ── Link bridge ───────────────────────────────────────────────
+  function updateLinkBridge(mode) {
     const text  = document.getElementById('link-bridge-text');
     const inner = document.querySelector('.link-bridge-inner');
-    if (ageGroup === 'All') {
-      text.textContent = 'Click a bar below to filter the dots above by age group';
+    if (mode === 'All' || mode === 'highlight-off') {
+      text.textContent = 'Click a bar below to highlight that age group in the scatter plot';
       inner.classList.remove('active');
+    } else if (mode.startsWith('brush-')) {
+      const n = mode.replace('brush-','');
+      text.textContent = `Showing adoption breakdown for ${n} selected animals ↓`;
+      inner.classList.add('active');
+    } else if (mode.startsWith('highlight-')) {
+      const ag = mode.replace('highlight-','');
+      text.textContent = `Highlighting: ${ag} · other dots dimmed`;
+      inner.classList.add('active');
     } else {
-      text.textContent = `Filtered by: ${ageGroup} · dots above updated!`;
+      text.textContent = `Highlighted by: ${mode} · other dots dimmed`;
       inner.classList.add('active');
     }
   }
@@ -314,7 +426,7 @@ d3.json('data/animals.json').then(rawData => {
     el.classList.add('plot-flash');
   }
 
-  // ── Modal detail ──────────────────────────────────────────
+  // ── Modal detail ──────────────────────────────────────────────
   function showAnimalModal(d) {
     selectedId = d.id;
     dotsG.selectAll('circle')
@@ -375,83 +487,104 @@ d3.json('data/animals.json').then(rawData => {
     `);
   }
 
-  // ── Update ────────────────────────────────────────────────
+  // ── Filters ───────────────────────────────────────────────────
   function applyFilters() {
     return rawData.filter(d => {
-      if (filters.type     !== 'All' && d.type      !== filters.type)     return false;
-      if (filters.intake   !== 'All' && d.intake    !== filters.intake)   return false;
-      if (filters.ageGroup !== 'All' && d.age_group !== filters.ageGroup) return false;
+      if (filters.type      !== 'All' && d.type      !== filters.type)      return false;
+      if (filters.intake    !== 'All' && d.intake    !== filters.intake)    return false;
+      if (filters.ageGroup  !== 'All' && d.age_group !== filters.ageGroup)  return false;
+      if (filters.condition !== 'All' && d.condition !== filters.condition) return false;
       return true;
     });
   }
 
-  function applyFiltersWithDeadline() {
-    return applyFilters().filter(d =>
-      daysThreshold >= 60 || d.days_in_shelter === null || d.days_in_shelter <= daysThreshold
-    );
-  }
-
+  // ── Stats ─────────────────────────────────────────────────────
   function updateStats(filtered) {
-    const total   = filtered.length;
-    const adopted = filtered.filter(d => d.outcome === 'Adoption').length;
-    const dogs    = filtered.filter(d => d.type === 'Dog');
-    const cats    = filtered.filter(d => d.type === 'Cat');
+    const statData = (brushActive && brushedIds.size > 0)
+      ? filtered.filter(d => brushedIds.has(d.id))
+      : filtered;
+    const total   = statData.length;
+    const adopted = statData.filter(d => d.outcome === 'Adoption').length;
+    const euth    = statData.filter(d => d.outcome === 'Euthanasia').length;
+    const dogs    = statData.filter(d => d.type === 'Dog');
+    const cats    = statData.filter(d => d.type === 'Cat');
     d3.select('#stat-total').text(total.toLocaleString());
     d3.select('#stat-adopted').text(total > 0 ? Math.round(adopted/total*100)+'%' : '—');
     d3.select('#stat-dog-pct').text(dogs.length > 0
       ? Math.round(dogs.filter(d=>d.outcome==='Adoption').length/dogs.length*100)+'%' : '—');
     d3.select('#stat-cat-pct').text(cats.length > 0
       ? Math.round(cats.filter(d=>d.outcome==='Adoption').length/cats.length*100)+'%' : '—');
+    d3.select('#stat-euthanasia')
+      .text(total > 0 ? Math.round(euth/total*100)+'%' : '—');
   }
 
+  // ── Dot count display ─────────────────────────────────────────
+  function updateDotCount() {
+    let count;
+    if (brushActive && brushedIds.size > 0) {
+      count = brushedIds.size;
+    } else {
+      count = applyFilters().length;
+    }
+    d3.select('#dot-count-num').text(count.toLocaleString());
+  }
+
+  // ── Scatter update (full data join with transitions) ──────────
   function updateScatter(filtered) {
     const jR = rowH * 0.36;
     const joined = dotsG.selectAll('circle').data(filtered, d => d.id);
 
-    // EXIT
-    joined.exit().transition().duration(250).ease(d3.easeCubicIn)
-      .attr('r',0).attr('opacity',0).remove();
+    // EXIT — fade out and shrink to 0
+    joined.exit()
+      .transition().duration(350).ease(d3.easeCubicIn)
+      .attr('r', 0)
+      .attr('opacity', 0)
+      .remove();
 
-    // ENTER
+    // ENTER — start at 0 size and fade in
     const entered = joined.enter().append('circle')
-      .attr('cx', d => xScale(d.age_years))
+      .attr('cx', d => xScale(d.days_in_shelter !== null ? Math.min(d.days_in_shelter, 120) : 0))
       .attr('cy', d => yScale(d.outcome) + d._jitter * jR)
-      .attr('r',0).attr('opacity',0)
-      .attr('stroke','rgba(255,255,255,0.5)').attr('stroke-width',0.8);
+      .attr('r', 0)
+      .attr('opacity', 0)
+      .attr('stroke', 'rgba(255,255,255,0.5)')
+      .attr('stroke-width', 0.8);
 
-    // MERGE — events always on merged set
+    // MERGE — animate to final state
     const merged = entered.merge(joined).style('cursor','none');
 
-    merged.transition().duration(420).ease(d3.easeCubicOut)
-      .attr('cx', d => xScale(d.age_years))
+    merged.transition().duration(350).ease(d3.easeCubicOut)
+      .attr('cx', d => xScale(d.days_in_shelter !== null ? Math.min(d.days_in_shelter, 120) : 0))
       .attr('cy', d => yScale(d.outcome) + d._jitter * jR)
-      .attr('r',4)
+      .attr('r', d => d.id === selectedId ? 7 : dotRadius(d))
       .attr('fill', d => dotColor(d))
       .attr('opacity', d => dotOpacity(d))
       .attr('stroke', d => d.id === selectedId ? '#FF8FAB' : 'rgba(255,255,255,0.5)')
       .attr('stroke-width', d => d.id === selectedId ? 3 : 0.8);
 
     merged
-      .on('mouseover', function(event, d) {
+      .on('mouseover', function(_event, d) {
         if (d.id !== selectedId)
           d3.select(this).raise().transition().duration(80).attr('r',7).attr('opacity',1);
         tooltip.style('opacity',1).html(`
           <strong style="color:#3D2040">${d.name || 'Unknown'}</strong>
           <span style="color:#A080A0;font-size:0.78rem"> · ${d.type}</span><br>
           <span style="color:#A080A0;font-size:0.78rem">${d.breed}</span><br>
-          Age: ${d.age_years < 1
-            ? Math.round(d.age_years*12)+'mo'
-            : d.age_years+'y'}
+          🏠 ${d.days_in_shelter !== null ? '<strong>' + d.days_in_shelter + ' days</strong> in shelter' : 'Days unknown'}
           &nbsp;·&nbsp; <strong>${d.outcome}</strong><br>
-          <span style="color:#A080A0;font-size:0.78rem">🏠 ${d.days_in_shelter !== null ? d.days_in_shelter + ' days in shelter' : '—'}</span>
+          <span style="color:#A080A0;font-size:0.78rem">Age: ${d.age_years < 1
+            ? Math.round(d.age_years*12)+'mo'
+            : d.age_years+'y'}</span>
         `);
       })
       .on('mousemove', function(event) {
         tooltip.style('left',(event.clientX+20)+'px').style('top',(event.clientY-48)+'px');
       })
-      .on('mouseout', function(event, d) {
+      .on('mouseout', function(_event, d) {
         if (d.id !== selectedId)
-          d3.select(this).transition().duration(80).attr('r',4).attr('opacity',0.8);
+          d3.select(this).transition().duration(80)
+            .attr('r', dotRadius(d))
+            .attr('opacity', dotOpacity(d));
         tooltip.style('opacity',0);
       })
       .on('click', function(event, d) {
@@ -460,12 +593,25 @@ d3.json('data/animals.json').then(rawData => {
       });
   }
 
+  // ── Scatter highlight — only updates opacity/radius, no re-join ──
+  function updateScatterHighlight() {
+    dotsG.selectAll('circle')
+      .transition().duration(400).ease(d3.easeCubicOut)
+      .attr('opacity', d => dotOpacity(d))
+      .attr('r', d => d.id === selectedId ? 7 : dotRadius(d));
+  }
+
+  // ── Bar chart update ──────────────────────────────────────────
   function updateBarChart(filtered) {
+    const chartData = (brushActive && brushedIds.size > 0)
+      ? filtered.filter(d => brushedIds.has(d.id))
+      : filtered;
+
     const ratioMap = {};
     AGE_GROUPS.forEach(ag => {
       ratioMap[ag] = {};
       ['Dog','Cat'].forEach(t => {
-        const grp = filtered.filter(d => d.age_group===ag && d.type===t);
+        const grp = chartData.filter(d => d.age_group===ag && d.type===t);
         ratioMap[ag][t] = grp.length > 0
           ? grp.filter(d=>d.outcome==='Adoption').length/grp.length : 0;
       });
@@ -511,15 +657,27 @@ d3.json('data/animals.json').then(rawData => {
     barHoverG.raise();
   }
 
+  // ── Main update ───────────────────────────────────────────────
   function update() {
-    const filtered     = applyFilters();
-    const withDeadline = applyFiltersWithDeadline();
-    updateStats(withDeadline);
+    const filtered = applyFilters();
+    updateStats(filtered);
     updateScatter(filtered);
-    updateBarChart(withDeadline);
+    updateBarChart(filtered);
+    updateDotCount();
   }
 
-  // ── Filter buttons ────────────────────────────────────────
+  // ── Insight card highlight ────────────────────────────────────
+  function updateInsightHighlight() {
+    const c = filters.condition;
+    document.getElementById('insight-1').classList
+      .toggle('highlighted', c === 'Sick' || c === 'Injured');
+    document.getElementById('insight-2').classList
+      .toggle('highlighted', c === 'Sick' || c === 'Injured');
+    document.getElementById('insight-3').classList
+      .toggle('highlighted', c === 'Normal');
+  }
+
+  // ── Filter buttons ────────────────────────────────────────────
   function setupFilterGroup(groupId, filterKey) {
     d3.select(`#${groupId}`).selectAll('.btn-filter')
       .on('click', function() {
@@ -536,21 +694,37 @@ d3.json('data/animals.json').then(rawData => {
           });
           updateLinkBridge(val);
         }
+        // Clear brush when filtering
+        if (brushActive) {
+          brushG.call(brush.clear);
+          brushActive = false;
+          brushedIds  = new Set();
+          brushBadgeG.style('display','none');
+          clearBrushBtn.style.display = 'none';
+        }
         update();
+        if (filterKey === 'condition') updateInsightHighlight();
       });
   }
 
-  setupFilterGroup('filter-type',   'type');
-  setupFilterGroup('filter-intake', 'intake');
-  setupFilterGroup('filter-age',    'ageGroup');
+  setupFilterGroup('filter-type',      'type');
+  setupFilterGroup('filter-intake',    'intake');
+  setupFilterGroup('filter-age',       'ageGroup');
+  setupFilterGroup('filter-condition', 'condition');
 
   d3.select('#reset-btn').on('click', () => {
-    filters.type = filters.intake = filters.ageGroup = 'All';
-    selectedId = null;
-    daysThreshold = 60;
-    document.getElementById('days-slider').value = 60;
-    updateDaysBadge(60);
-    ['filter-type','filter-intake','filter-age'].forEach(id => {
+    filters.type = filters.intake = filters.ageGroup = filters.condition = 'All';
+    selectedId    = null;
+    barHighlight  = null;
+
+    // Clear brush
+    brushG.call(brush.clear);
+    brushActive = false;
+    brushedIds  = new Set();
+    brushBadgeG.style('display','none');
+    clearBrushBtn.style.display = 'none';
+
+    ['filter-type','filter-intake','filter-age','filter-condition'].forEach(id => {
       d3.select(`#${id}`).selectAll('.btn-filter')
         .classed('active', function() { return d3.select(this).attr('data-val') === 'All'; });
     });
@@ -559,31 +733,8 @@ d3.json('data/animals.json').then(rawData => {
     });
     updateLinkBridge('All');
     update();
+    updateInsightHighlight();
     closeModal();
-  });
-
-  document.getElementById('days-slider').addEventListener('input', function() {
-    daysThreshold = +this.value;
-    updateDaysBadge(daysThreshold);
-    update();
-  });
-
-  document.getElementById('color-btn-species').addEventListener('click', function() {
-    colorMode = 'species';
-    this.classList.add('active');
-    document.getElementById('color-btn-days').classList.remove('active');
-    document.getElementById('species-legend').style.display = '';
-    document.getElementById('days-gradient-legend').style.display = 'none';
-    update();
-  });
-
-  document.getElementById('color-btn-days').addEventListener('click', function() {
-    colorMode = 'days';
-    this.classList.add('active');
-    document.getElementById('color-btn-species').classList.remove('active');
-    document.getElementById('species-legend').style.display = 'none';
-    document.getElementById('days-gradient-legend').style.display = '';
-    update();
   });
 
   svg.on('click', function(event) {
@@ -594,6 +745,17 @@ d3.json('data/animals.json').then(rawData => {
     }
   });
 
+  // ── Initial render ────────────────────────────────────────────
   update();
+
+  // Subtly pulse the Condition filter to guide users toward it
+  setTimeout(() => {
+    const conditionGroup = document.querySelector('#filter-condition');
+    conditionGroup.style.transition = 'box-shadow 0.3s';
+    conditionGroup.style.boxShadow = '0 0 0 3px #FF8FAB';
+    setTimeout(() => {
+      conditionGroup.style.boxShadow = 'none';
+    }, 1500);
+  }, 2000);
 
 }).catch(err => console.error('Data load error:', err));
