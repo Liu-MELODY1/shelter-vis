@@ -4,11 +4,19 @@
 ────────────────────────────────────────────────────────────── */
 
 const OUTCOMES   = ['Other','Euthanasia','Transfer','Return to Owner','Adoption'];
-const AGE_GROUPS = ['Baby (<1yr)','Young (1-3yr)','Adult (4-7yr)','Senior (8+yr)'];
+const AGE_GROUPS  = ['Baby (<1yr)','Young (1-3yr)','Adult (4-7yr)','Senior (8+yr)'];
+const COND_GROUPS = ['Normal', 'Sick', 'Injured'];
 
 const TYPE_COLOR = {
   Dog: '#6BAED6',
   Cat: '#F5C518',
+};
+
+const CONDITION_COLOR = {
+  'Normal':  '#3AAA74',
+  'Sick':    '#C45050',
+  'Injured': '#E09B3A',
+  'Other':   '#999',
 };
 
 const OUTCOME_COLOR = {
@@ -22,18 +30,36 @@ const OUTCOME_COLOR = {
 const filters     = { type: 'All', intake: 'All', ageGroup: 'All', condition: 'All' };
 let selectedId    = null;
 let hintDismissed = false;
-let barHighlight  = null; // age group highlighted from bar chart click
+let barHighlight  = null;
 let brushActive   = false;
 let brushedIds    = new Set();
+let colorMode     = 'species';
+let activeInsight = null;
+
+// New: controls which outcome row to highlight (dims all others)
+let outcomeHighlight = null;
+// New: when true, dims Normal/Healthy dots so Sick+Injured stand out
+let dimNormalCondition = false;
 
 function dotColor(d) {
-  return TYPE_COLOR[d.type];
+  if (colorMode === 'condition') {
+    return CONDITION_COLOR[d.condition] || '#999';
+  }
+  return TYPE_COLOR[d.type] || '#999';
 }
 
 function dotOpacity(d) {
   // Brush selection takes priority
   if (brushActive && brushedIds.size > 0) {
     return brushedIds.has(d.id) ? 0.88 : 0.15;
+  }
+  // Outcome row highlight (insight 1 and 3)
+  if (outcomeHighlight !== null) {
+    return d.outcome === outcomeHighlight ? 0.92 : 0.12;
+  }
+  // Dim Normal condition to make Sick+Injured stand out (insight 2)
+  if (dimNormalCondition) {
+    return d.condition === 'Normal' ? 0.12 : 0.88;
   }
   // Bar highlight mode
   if (barHighlight !== null) {
@@ -43,7 +69,6 @@ function dotOpacity(d) {
 }
 
 function dotRadius(d) {
-  // Scale up highlighted age group dots 1.4x (4 * 1.4 = 5.6)
   if (barHighlight !== null && d.age_group === barHighlight) return 5.6;
   return 4;
 }
@@ -207,6 +232,17 @@ d3.json('data/animals.json').then(rawData => {
     .attr('fill','#A080A0').attr('font-weight','700')
     .text('Days in Shelter');
 
+  // Brush instruction text (top-right)
+  g.append('text')
+    .attr('x', iW)
+    .attr('y', -22)
+    .attr('text-anchor', 'end')
+    .attr('font-family', 'Nunito, sans-serif')
+    .attr('font-size', '11px')
+    .attr('fill', '#9060A0')
+    .attr('font-style', 'italic')
+    .text('💡 Drag to select · Clear Brush to reset');
+
   // Y axis labels
   OUTCOMES.forEach(oc => {
     g.append('circle')
@@ -220,25 +256,65 @@ d3.json('data/animals.json').then(rawData => {
       .text(oc);
   });
 
-  // ── Brush layer (BELOW dots so dots can receive hover/click) ─
+  // ── Outcome row highlight overlay (for insights 1 & 3) ───────
+  // These rects light up behind a specific outcome row
+  const rowHighlightG = g.append('g').attr('class','row-highlights').attr('pointer-events','none');
+  OUTCOMES.forEach(oc => {
+    rowHighlightG.append('rect')
+      .attr('class', 'row-hl row-hl-' + oc.replace(/\s+/g,'-'))
+      .attr('x', 0).attr('y', yScale(oc) - rowH/2)
+      .attr('width', iW).attr('height', rowH)
+      .attr('rx', 4)
+      .attr('fill', OUTCOME_COLOR[oc])
+      .attr('opacity', 0);
+  });
+
+  function setRowHighlight(outcome) {
+    // outcome = null to clear, or string to highlight
+    rowHighlightG.selectAll('.row-hl')
+      .transition().duration(400)
+      .attr('opacity', function() {
+        if (outcome === null) return 0;
+        const cls = d3.select(this).attr('class');
+        const key = 'row-hl-' + outcome.replace(/\s+/g,'-');
+        return cls.includes(key) ? 0.08 : 0;
+      });
+  }
+
+  // ── Day-range shading (for insight 2: day 0-1 zone) ──────────
+  const dayRangeRect = g.append('rect')
+    .attr('class','day-range-highlight')
+    .attr('x', xScale(0)).attr('y', 0)
+    .attr('width', xScale(7) - xScale(0))
+    .attr('height', iH)
+    .attr('fill', '#C45050')
+    .attr('opacity', 0)
+    .attr('pointer-events', 'none');
+
+  const dayRangeLabel = g.append('text')
+    .attr('class','day-range-label')
+    .attr('x', xScale(3.5)).attr('y', -10)
+    .attr('text-anchor', 'middle')
+    .attr('font-family', 'Nunito, sans-serif')
+    .attr('font-size', '10px')
+    .attr('fill', '#C45050')
+    .attr('font-weight', '700')
+    .attr('opacity', 0)
+    .text('Day 0–7');
+
+  function setDayRangeHighlight(visible) {
+    dayRangeRect.transition().duration(400).attr('opacity', visible ? 0.07 : 0);
+    dayRangeLabel.transition().duration(400).attr('opacity', visible ? 1 : 0);
+  }
+
+  // ── Brush layer (BELOW dots) ──────────────────────────────────
   const brushG = g.append('g').attr('class','brush-layer');
 
-  // ── Dots layer (ABOVE brush so they receive events first) ────
+  // ── Dots layer ────────────────────────────────────────────────
   const dotsG   = g.append('g').attr('class','dots');
   const tooltip = d3.select('#tooltip');
 
-  // ── Brush instruction text (top-right, above plot area) ──────
-  g.append('text')
-    .attr('x', iW)
-    .attr('y', -22)
-    .attr('text-anchor', 'end')
-    .attr('font-family', 'Nunito, sans-serif')
-    .attr('font-size', '11px')
-    .attr('fill', '#9060A0')
-    .attr('font-style', 'italic')
-    .text('💡 Drag to select · Clear Brush to reset');
-
-  // ── Brush badge (SVG, above everything) ──────────────────────
+  // ── Brush badge ───────────────────────────────────────────────
   const brushBadgeG = g.append('g').attr('class','brush-badge-g').style('display','none');
   const brushBadgeBg = brushBadgeG.append('rect')
     .attr('rx',6).attr('ry',6).attr('height',22)
@@ -274,7 +350,6 @@ d3.json('data/animals.json').then(rawData => {
       const count = brushedIds.size;
       const label = `${count} selected`;
       brushBadgeTxt.text(label);
-      // approximate width (7px per char + padding)
       const tw = label.length * 7 + 16;
       brushBadgeBg.attr('width', tw);
       const bx = Math.min(sel[1][0] + 6, iW - tw - 4);
@@ -323,8 +398,8 @@ d3.json('data/animals.json').then(rawData => {
     .attr('preserveAspectRatio','xMidYMid meet');
   const bg = bSvg.append('g').attr('transform',`translate(${bM.left},${bM.top})`);
 
-  const bXScale   = d3.scaleBand().domain(AGE_GROUPS).range([0,bIW]).paddingInner(0.3).paddingOuter(0.18);
-  const bSubScale = d3.scaleBand().domain(['Dog','Cat']).range([0,bXScale.bandwidth()]).padding(0.1);
+  const bXScale   = d3.scaleBand().domain(COND_GROUPS).range([0,bIW]).paddingInner(0.3).paddingOuter(0.18);
+  const bSubScale = d3.scaleBand().domain(['Adoption','Euthanasia']).range([0,bXScale.bandwidth()]).padding(0.1);
   const bYScale   = d3.scaleLinear().domain([0,1]).range([bIH,0]);
 
   bg.append('g')
@@ -341,58 +416,34 @@ d3.json('data/animals.json').then(rawData => {
     .call(gg => gg.select('.domain').attr('stroke','#F0D0E0'));
 
   // Bar legend
-  const bLeg = bg.append('g').attr('transform',`translate(${bIW-90},-18)`);
-  ['Dog','Cat'].forEach((t,i) => {
-    const row = bLeg.append('g').attr('transform',`translate(${i*58},0)`);
-    row.append('rect').attr('width',10).attr('height',10).attr('rx',3).attr('fill',TYPE_COLOR[t]);
+  const bLeg = bg.append('g').attr('transform',`translate(${bIW-150},-18)`);
+  [['Adoption','#3AAA74'],['Euthanasia','#C45050']].forEach(([label,color],i) => {
+    const row = bLeg.append('g').attr('transform',`translate(${i*88},0)`);
+    row.append('rect').attr('width',10).attr('height',10).attr('rx',3).attr('fill',color);
     row.append('text').attr('x',14).attr('y',9)
       .attr('font-family','Nunito,sans-serif').attr('font-size','11px')
-      .attr('fill','#A080A0').attr('font-weight','700').text(t);
+      .attr('fill','#A080A0').attr('font-weight','700').text(label);
   });
 
   bg.append('text')
     .attr('x',bIW/2).attr('y',bIH+44).attr('text-anchor','middle')
     .attr('font-family','Caveat,cursive').attr('font-size','13px').attr('fill','#C0A0C0')
-    .text('Click a bar group to highlight that age · click again to clear ✨');
+    .text('Adoption vs euthanasia rate by intake condition');
 
-  // Clickable overlay rects per age group
+  // Hover overlay rects per condition group
   const barHoverG = bg.append('g');
-  AGE_GROUPS.forEach(ag => {
-    const sk = ag.replace(/[^a-z]/gi,'_');
+  COND_GROUPS.forEach(cond => {
     barHoverG.append('rect')
-      .attr('class',`bar-bg bar-bg-${sk}`)
-      .attr('x', bXScale(ag)-4).attr('y',0)
+      .attr('class','bar-bg')
+      .attr('x', bXScale(cond)-4).attr('y',0)
       .attr('width', bXScale.bandwidth()+8).attr('height',bIH)
       .attr('rx',8).attr('fill','transparent')
       .style('cursor','none')
       .on('mouseenter', function() {
-        if (barHighlight !== ag)
-          d3.select(this).attr('fill','rgba(255,143,171,0.10)');
+        d3.select(this).attr('fill','rgba(255,143,171,0.08)');
       })
       .on('mouseleave', function() {
-        if (barHighlight !== ag)
-          d3.select(this).attr('fill','transparent');
-      })
-      .on('click', function() {
-        // Toggle bar highlight (does NOT filter — keeps all dots)
-        if (barHighlight === ag) {
-          barHighlight = null;
-          AGE_GROUPS.forEach(a => {
-            barHoverG.select(`.bar-bg-${a.replace(/[^a-z]/gi,'_')}`)
-              .attr('fill','transparent');
-          });
-          updateLinkBridge('highlight-off');
-        } else {
-          barHighlight = ag;
-          AGE_GROUPS.forEach(a => {
-            barHoverG.select(`.bar-bg-${a.replace(/[^a-z]/gi,'_')}`)
-              .attr('fill', a === ag ? 'rgba(255,143,171,0.15)' : 'transparent');
-          });
-          updateLinkBridge('highlight-' + ag);
-        }
-        updateScatterHighlight();
-        updateDotCount();
-        flashScatter();
+        d3.select(this).attr('fill','transparent');
       });
   });
 
@@ -402,20 +453,25 @@ d3.json('data/animals.json').then(rawData => {
   function updateLinkBridge(mode) {
     const text  = document.getElementById('link-bridge-text');
     const inner = document.querySelector('.link-bridge-inner');
-    if (mode === 'All' || mode === 'highlight-off') {
-      text.textContent = 'Click a bar below to highlight that age group in the scatter plot';
+    if (mode === 'All') {
+      text.textContent = 'Intake condition shapes fate — explore below ↕';
       inner.classList.remove('active');
     } else if (mode.startsWith('brush-')) {
       const n = mode.replace('brush-','');
-      text.textContent = `Showing adoption breakdown for ${n} selected animals ↓`;
+      text.textContent = `Showing outcome breakdown for ${n} selected animals ↓`;
       inner.classList.add('active');
-    } else if (mode.startsWith('highlight-')) {
-      const ag = mode.replace('highlight-','');
-      text.textContent = `Highlighting: ${ag} · other dots dimmed`;
+    } else if (mode === 'insight-1') {
+      text.textContent = '⚠ Most euthanasia happens in the first 7 days — condition breakdown below';
+      inner.classList.add('active');
+    } else if (mode === 'insight-2') {
+      text.textContent = '💔 Sick (19%) & Injured (16%) euthanasia vs Normal (1%) — see below';
+      inner.classList.add('active');
+    } else if (mode === 'insight-3') {
+      text.textContent = '✨ Healthy: 52% adoption rate vs 24% for sick/injured — see below';
       inner.classList.add('active');
     } else {
-      text.textContent = `Highlighted by: ${mode} · other dots dimmed`;
-      inner.classList.add('active');
+      text.textContent = 'Intake condition shapes fate — explore below ↕';
+      inner.classList.remove('active');
     }
   }
 
@@ -534,23 +590,17 @@ d3.json('data/animals.json').then(rawData => {
     const jR = rowH * 0.36;
     const joined = dotsG.selectAll('circle').data(filtered, d => d.id);
 
-    // EXIT — fade out and shrink to 0
     joined.exit()
       .transition().duration(350).ease(d3.easeCubicIn)
-      .attr('r', 0)
-      .attr('opacity', 0)
-      .remove();
+      .attr('r', 0).attr('opacity', 0).remove();
 
-    // ENTER — start at 0 size and fade in
     const entered = joined.enter().append('circle')
       .attr('cx', d => xScale(d.days_in_shelter !== null ? Math.min(d.days_in_shelter, 120) : 0))
       .attr('cy', d => yScale(d.outcome) + d._jitter * jR)
-      .attr('r', 0)
-      .attr('opacity', 0)
+      .attr('r', 0).attr('opacity', 0)
       .attr('stroke', 'rgba(255,255,255,0.5)')
       .attr('stroke-width', 0.8);
 
-    // MERGE — animate to final state
     const merged = entered.merge(joined).style('cursor','none');
 
     merged.transition().duration(350).ease(d3.easeCubicOut)
@@ -572,7 +622,7 @@ d3.json('data/animals.json').then(rawData => {
           <span style="color:#A080A0;font-size:0.78rem">${d.breed}</span><br>
           🏠 ${d.days_in_shelter !== null ? '<strong>' + d.days_in_shelter + ' days</strong> in shelter' : 'Days unknown'}
           &nbsp;·&nbsp; <strong>${d.outcome}</strong><br>
-          <span style="color:#A080A0;font-size:0.78rem">Age: ${d.age_years < 1
+          <span style="color:#A080A0;font-size:0.78rem">Condition: ${d.condition} · Age: ${d.age_years < 1
             ? Math.round(d.age_years*12)+'mo'
             : d.age_years+'y'}</span>
         `);
@@ -607,51 +657,50 @@ d3.json('data/animals.json').then(rawData => {
       ? filtered.filter(d => brushedIds.has(d.id))
       : filtered;
 
+    const OUTCOME_FILL = { 'Adoption': '#3AAA74', 'Euthanasia': '#C45050' };
     const ratioMap = {};
-    AGE_GROUPS.forEach(ag => {
-      ratioMap[ag] = {};
-      ['Dog','Cat'].forEach(t => {
-        const grp = chartData.filter(d => d.age_group===ag && d.type===t);
-        ratioMap[ag][t] = grp.length > 0
-          ? grp.filter(d=>d.outcome==='Adoption').length/grp.length : 0;
+    COND_GROUPS.forEach(cond => {
+      ratioMap[cond] = {};
+      ['Adoption','Euthanasia'].forEach(oc => {
+        const grp = chartData.filter(d => d.condition === cond);
+        ratioMap[cond][oc] = grp.length > 0
+          ? grp.filter(d => d.outcome === oc).length / grp.length : 0;
       });
     });
 
-    const barData = AGE_GROUPS.flatMap(ag=>
-      ['Dog','Cat'].map(t=>({ ag, t, ratio: ratioMap[ag][t] }))
+    const barData = COND_GROUPS.flatMap(cond =>
+      ['Adoption','Euthanasia'].map(oc => ({ cond, oc, ratio: ratioMap[cond][oc] }))
     );
 
-    const dimmed = d => filters.ageGroup!=='All' && filters.ageGroup!==d.ag ? 0.22 : 0.88;
-
-    const bars = barGroup.selectAll('rect.bar').data(barData, d=>d.ag+d.t);
+    const bars = barGroup.selectAll('rect.bar').data(barData, d => d.cond + d.oc);
     bars.enter().append('rect').attr('class','bar')
-        .attr('x', d=>bXScale(d.ag)+bSubScale(d.t))
+        .attr('x', d => bXScale(d.cond) + bSubScale(d.oc))
         .attr('width', bSubScale.bandwidth())
-        .attr('y',bIH).attr('height',0).attr('rx',4)
-        .attr('fill', d=>TYPE_COLOR[d.t])
+        .attr('y', bIH).attr('height', 0).attr('rx', 4)
+        .attr('fill', d => OUTCOME_FILL[d.oc])
         .style('pointer-events','none')
       .merge(bars)
       .transition().duration(500).ease(d3.easeCubicOut)
-        .attr('x', d=>bXScale(d.ag)+bSubScale(d.t))
+        .attr('x', d => bXScale(d.cond) + bSubScale(d.oc))
         .attr('width', bSubScale.bandwidth())
-        .attr('y', d=>bYScale(d.ratio))
-        .attr('height', d=>bIH-bYScale(d.ratio))
-        .attr('opacity', dimmed);
+        .attr('y', d => bYScale(d.ratio))
+        .attr('height', d => bIH - bYScale(d.ratio))
+        .attr('opacity', 0.88);
 
     bars.exit().remove();
 
-    const labels = barGroup.selectAll('text.bar-label').data(barData, d=>d.ag+d.t);
+    const labels = barGroup.selectAll('text.bar-label').data(barData, d => d.cond + d.oc);
     labels.enter().append('text').attr('class','bar-label')
         .attr('text-anchor','middle')
         .attr('font-family','Nunito,sans-serif').attr('font-size','10px')
         .attr('fill','#3D2040').attr('font-weight','700')
-        .attr('y',bIH)
+        .attr('y', bIH)
       .merge(labels)
       .transition().duration(500)
-        .attr('x', d=>bXScale(d.ag)+bSubScale(d.t)+bSubScale.bandwidth()/2)
-        .attr('y', d=>bYScale(d.ratio)-4)
-        .attr('opacity', dimmed)
-        .text(d => d.ratio>0 ? Math.round(d.ratio*100)+'%' : '');
+        .attr('x', d => bXScale(d.cond) + bSubScale(d.oc) + bSubScale.bandwidth()/2)
+        .attr('y', d => bYScale(d.ratio) - 4)
+        .attr('opacity', 0.88)
+        .text(d => d.ratio > 0 ? Math.round(d.ratio * 100) + '%' : '');
 
     labels.exit().remove();
     barHoverG.raise();
@@ -666,15 +715,114 @@ d3.json('data/animals.json').then(rawData => {
     updateDotCount();
   }
 
-  // ── Insight card highlight ────────────────────────────────────
+  // ── Insight card highlight (passive — triggered by filter) ────
   function updateInsightHighlight() {
     const c = filters.condition;
+    // Only highlight passively when no insight is actively selected
+    if (activeInsight !== null) return;
     document.getElementById('insight-1').classList
       .toggle('highlighted', c === 'Sick' || c === 'Injured');
     document.getElementById('insight-2').classList
       .toggle('highlighted', c === 'Sick' || c === 'Injured');
     document.getElementById('insight-3').classList
       .toggle('highlighted', c === 'Normal');
+  }
+
+  // ── Helper: switch color mode UI ─────────────────────────────
+  function setColorMode(mode) {
+    colorMode = mode;
+    document.getElementById('color-btn-species')
+      .classList.toggle('active', mode === 'species');
+    document.getElementById('color-btn-condition')
+      .classList.toggle('active', mode === 'condition');
+    document.getElementById('species-legend').style.display =
+      mode === 'species' ? '' : 'none';
+    document.getElementById('condition-legend').style.display =
+      mode === 'condition' ? '' : 'none';
+  }
+
+  // ── Helper: set condition filter button UI ────────────────────
+  function setConditionFilterUI(val) {
+    filters.condition = val;
+    d3.select('#filter-condition').selectAll('.btn-filter')
+      .classed('active', function() {
+        return d3.select(this).attr('data-val') === val;
+      });
+  }
+
+  // ── Insight card activation ───────────────────────────────────
+  function activateInsight(n) {
+    // Remove all insight active states
+    [1,2,3].forEach(i =>
+      document.getElementById('insight-'+i)
+        .classList.remove('highlighted','active-insight'));
+
+    if (activeInsight === n) {
+      // Toggle off — full reset
+      activeInsight      = null;
+      outcomeHighlight   = null;
+      dimNormalCondition = false;
+      setColorMode('species');
+      setConditionFilterUI('All');
+      setRowHighlight(null);
+      setDayRangeHighlight(false);
+      update();
+      updateInsightHighlight();
+      updateLinkBridge('All');
+      return;
+    }
+
+    activeInsight = n;
+    document.getElementById('insight-'+n).classList.add('highlighted','active-insight');
+
+    if (n === 1) {
+      // DATA: 89.5% of euthanasia happens within 7 days
+      // → color by condition (Sick=red stands out in Euthanasia row)
+      // → highlight Euthanasia row, dim everything else
+      // → highlight day 0-7 zone to show WHERE it happens
+      outcomeHighlight   = 'Euthanasia';
+      dimNormalCondition = false;
+      setColorMode('condition');
+      setConditionFilterUI('All');
+      setRowHighlight('Euthanasia');
+      setDayRangeHighlight(true);   // shows 0-7d zone
+      update();
+      updateScatterHighlight();
+      updateLinkBridge('insight-1');
+      flashScatter();
+
+    } else if (n === 2) {
+      // DATA: Sick euthanasia 19%, Injured 16%, Normal only 1%
+      // → show ALL conditions so bar chart compares all three
+      // → color by condition to distinguish sick (red) + injured (orange) vs healthy (green)
+      // → highlight Euthanasia row
+      outcomeHighlight   = 'Euthanasia';
+      dimNormalCondition = false;
+      setColorMode('condition');
+      setConditionFilterUI('All');
+      setRowHighlight('Euthanasia');
+      setDayRangeHighlight(false);
+      update();
+      updateScatterHighlight();
+      updateLinkBridge('insight-2');
+      flashScatter();
+
+    } else if (n === 3) {
+      // DATA: Normal adoption 47.5%, Sick+Injured only 23.8% — nearly 2x
+      // → color by condition (green=Normal dominates Adoption row)
+      // → highlight Adoption row
+      // → show all conditions for comparison
+      outcomeHighlight   = 'Adoption';
+      dimNormalCondition = false;
+      setColorMode('condition');
+      setConditionFilterUI('All');
+      setRowHighlight('Adoption');
+      setDayRangeHighlight(false);
+      update();
+      updateScatterHighlight();
+      updateLinkBridge('insight-3');
+      flashScatter();
+    }
   }
 
   // ── Filter buttons ────────────────────────────────────────────
@@ -687,13 +835,6 @@ d3.json('data/animals.json').then(rawData => {
           .classed('active', function() {
             return d3.select(this).attr('data-val') === val;
           });
-        if (filterKey === 'ageGroup') {
-          AGE_GROUPS.forEach(ag => {
-            barHoverG.select(`.bar-bg-${ag.replace(/[^a-z]/gi,'_')}`)
-              .attr('fill', ag===val ? 'rgba(255,143,171,0.15)' : 'transparent');
-          });
-          updateLinkBridge(val);
-        }
         // Clear brush when filtering
         if (brushActive) {
           brushG.call(brush.clear);
@@ -701,6 +842,17 @@ d3.json('data/animals.json').then(rawData => {
           brushedIds  = new Set();
           brushBadgeG.style('display','none');
           clearBrushBtn.style.display = 'none';
+        }
+        // If user manually changes filter, clear insight state
+        if (filterKey === 'condition' && activeInsight !== null) {
+          activeInsight      = null;
+          outcomeHighlight   = null;
+          dimNormalCondition = false;
+          setRowHighlight(null);
+          setDayRangeHighlight(false);
+          [1,2,3].forEach(i =>
+            document.getElementById('insight-'+i)
+              .classList.remove('highlighted','active-insight'));
         }
         update();
         if (filterKey === 'condition') updateInsightHighlight();
@@ -714,10 +866,12 @@ d3.json('data/animals.json').then(rawData => {
 
   d3.select('#reset-btn').on('click', () => {
     filters.type = filters.intake = filters.ageGroup = filters.condition = 'All';
-    selectedId    = null;
-    barHighlight  = null;
+    selectedId         = null;
+    barHighlight       = null;
+    activeInsight      = null;
+    outcomeHighlight   = null;
+    dimNormalCondition = false;
 
-    // Clear brush
     brushG.call(brush.clear);
     brushActive = false;
     brushedIds  = new Set();
@@ -728,12 +882,18 @@ d3.json('data/animals.json').then(rawData => {
       d3.select(`#${id}`).selectAll('.btn-filter')
         .classed('active', function() { return d3.select(this).attr('data-val') === 'All'; });
     });
-    AGE_GROUPS.forEach(ag => {
-      barHoverG.select(`.bar-bg-${ag.replace(/[^a-z]/gi,'_')}`).attr('fill','transparent');
-    });
+
+    setColorMode('species');
+    setRowHighlight(null);
+    setDayRangeHighlight(false);
     updateLinkBridge('All');
     update();
     updateInsightHighlight();
+
+    [1,2,3].forEach(i =>
+      document.getElementById('insight-'+i)
+        .classList.remove('highlighted','active-insight'));
+
     closeModal();
   });
 
@@ -745,10 +905,27 @@ d3.json('data/animals.json').then(rawData => {
     }
   });
 
+  // ── Color mode buttons ────────────────────────────────────────
+  document.getElementById('color-btn-species').addEventListener('click', function() {
+    setColorMode('species');
+    update();
+  });
+
+  document.getElementById('color-btn-condition').addEventListener('click', function() {
+    setColorMode('condition');
+    update();
+  });
+
+  // ── Insight card clicks ───────────────────────────────────────
+  [1,2,3].forEach(n => {
+    document.getElementById('insight-'+n)
+      .addEventListener('click', () => activateInsight(n));
+  });
+
   // ── Initial render ────────────────────────────────────────────
   update();
 
-  // Subtly pulse the Condition filter to guide users toward it
+  // Pulse the Condition filter to guide users
   setTimeout(() => {
     const conditionGroup = document.querySelector('#filter-condition');
     conditionGroup.style.transition = 'box-shadow 0.3s';

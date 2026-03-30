@@ -58,7 +58,10 @@
         <div class="stat-number" id="stat-dog-pct">—</div>
         <div class="stat-label">🐕 Dog adoption rate</div>
       </div>
-      <div class="stat-box">
+      <div class="stat-box cat-gif-stat">
+        <div class="filter-gif-wrap">
+          <img src="data/dog_cat_transparent.gif" alt="dog and cat" class="filter-gif" />
+        </div>
         <div class="stat-number" id="stat-cat-pct">—</div>
         <div class="stat-label">🐈 Cat adoption rate</div>
       </div>
@@ -87,16 +90,16 @@
   <div class="insight-bar">
     <div class="insight-card" id="insight-1">
       <span class="insight-icon">⚠️</span>
-      <span class="insight-text">Most euthanasia happens <strong>within the first 7 days</strong></span>
+      <span class="insight-text">Most euthanasia happens <strong>within the first 7 days</strong> of arrival</span>
     </div>
     <div class="insight-card" id="insight-2">
       <span class="insight-icon">💔</span>
-      <span class="insight-text">Sick & injured animals <strong>cluster at day 0–1</strong></span>
+      <span class="insight-text">Sick and injured animals face a <strong>far higher euthanasia rate</strong> than healthy ones</span>
     </div>
     <div class="insight-card" id="insight-3">
       <span class="insight-icon">✨</span>
-      <span class="insight-text">Adoptions spread across <strong>days 7–120</strong> — they take time</span>
-    </div>
+      <span class="insight-text">Healthy animals are adopted at <strong>twice the rate</strong> of sick or injured ones</span>
+  </div>
   </div>
 
   <!-- MAIN LAYOUT -->
@@ -105,9 +108,21 @@
     <!-- LEFT: scatter plot -->
     <div class="left-panel">
       <div class="plot-header">
-        <div id="species-legend" class="legend">
-          <div class="legend-item"><span class="legend-dot dog"></span> Dog</div>
-          <div class="legend-item"><span class="legend-dot cat"></span> Cat</div>
+        <div class="plot-header-left">
+          <div class="color-mode-btns">
+            <span class="color-mode-label">Color by:</span>
+            <button class="color-btn active" id="color-btn-species">🐾 Species</button>
+            <button class="color-btn" id="color-btn-condition">🏥 Condition</button>
+          </div>
+          <div id="species-legend" class="legend">
+            <div class="legend-item"><span class="legend-dot dog"></span> Dog</div>
+            <div class="legend-item"><span class="legend-dot cat"></span> Cat</div>
+          </div>
+          <div id="condition-legend" style="display:none" class="legend">
+            <div class="legend-item"><span class="legend-dot" style="background:#3AAA74"></span> Healthy</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#C45050"></span> Sick</div>
+            <div class="legend-item"><span class="legend-dot" style="background:#E09B3A"></span> Injured</div>
+          </div>
         </div>
         <div class="plot-header-right">
           <div class="plot-header-top-row">
@@ -127,9 +142,6 @@
 
     <!-- RIGHT: filters only -->
     <div class="right-panel">
-      <div class="filter-gif-wrap">
-        <img src="data/dog_cat_transparent.gif" alt="dog and cat" class="filter-gif" />
-      </div>
       <div class="filters">
         <div class="filter-title">✨ Filter Animals</div>
 
@@ -190,8 +202,8 @@
   <!-- BOTTOM BAR CHART -->
   <div class="bottom-section">
     <div class="bottom-header">
-      <h3>📊 Adoption Rate by Age Group</h3>
-      <p>Percentage adopted, by age — updates with filters · click a bar to highlight!</p>
+      <h3>📊 Outcome Rate by Intake Condition</h3>
+      <p>Adoption vs euthanasia rate by condition — updates with filters</p>
     </div>
     <svg id="bar-chart"></svg>
   </div>
