@@ -435,17 +435,27 @@ d3.json('data/animals.json').then(rawData => {
   COND_GROUPS.forEach(cond => {
     barHoverG.append('rect')
       .attr('class','bar-bg')
+      .attr('data-cond', cond)
       .attr('x', bXScale(cond)-4).attr('y',0)
       .attr('width', bXScale.bandwidth()+8).attr('height',bIH)
       .attr('rx',8).attr('fill','transparent')
       .style('cursor','none')
       .on('mouseenter', function() {
-        d3.select(this).attr('fill','rgba(255,143,171,0.08)');
+        d3.select(this).attr('fill','rgba(255,143,171,0.15)');
       })
       .on('mouseleave', function() {
-        d3.select(this).attr('fill','transparent');
+        d3.select(this).attr('fill', barHighlight === cond ? 'rgba(255,143,171,0.15)' : 'transparent');
       })
       .on('click', function() {
+        // Clear insight state so outcome/condition highlights don't conflict
+        outcomeHighlight   = null;
+        dimNormalCondition = false;
+        activeInsight      = null;
+        setRowHighlight(null);
+        setDayRangeHighlight(false);
+        [1,2,3].forEach(i =>
+          document.getElementById('insight-'+i)
+            .classList.remove('highlighted','active-insight'));
         if (barHighlight === cond) {
           barHighlight = null;
           updateLinkBridge('All');
@@ -453,6 +463,12 @@ d3.json('data/animals.json').then(rawData => {
           barHighlight = cond;
           updateLinkBridge('bar-' + cond);
         }
+        // Sync bar background highlight
+        bg.selectAll('.bar-bg')
+          .attr('fill', function() {
+            return d3.select(this).attr('data-cond') === barHighlight
+              ? 'rgba(255,143,171,0.15)' : 'transparent';
+          });
         updateScatterHighlight();
       });
   });
@@ -777,10 +793,12 @@ d3.json('data/animals.json').then(rawData => {
       activeInsight      = null;
       outcomeHighlight   = null;
       dimNormalCondition = false;
+      barHighlight       = null;
       setColorMode('species');
       setConditionFilterUI('All');
       setRowHighlight(null);
       setDayRangeHighlight(false);
+      bg.selectAll('.bar-bg').attr('fill','transparent');
       update();
       updateInsightHighlight();
       updateLinkBridge('All');
@@ -788,6 +806,8 @@ d3.json('data/animals.json').then(rawData => {
     }
 
     activeInsight = n;
+    barHighlight  = null;
+    bg.selectAll('.bar-bg').attr('fill','transparent');
     document.getElementById('insight-'+n).classList.add('highlighted','active-insight');
 
     if (n === 1) {
@@ -886,6 +906,7 @@ d3.json('data/animals.json').then(rawData => {
     activeInsight      = null;
     outcomeHighlight   = null;
     dimNormalCondition = false;
+    bg.selectAll('.bar-bg').attr('fill','transparent');
 
     brushG.call(brush.clear);
     brushActive = false;
